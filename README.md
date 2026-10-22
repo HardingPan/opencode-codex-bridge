@@ -18,14 +18,14 @@ Codex(指挥) ──MCP(stdio)──▶ 本桥 ──`opencode run --auto`──
   `cwd`、`agent`(build/plan)
 - 委派出的会话以 `codex委派-…` 命名,在你的 OpenCode 会话列表里清晰可辨
 
-## 工具(4 个,刻意精简)
+## 工具(1 个,精简到底,Codex 侧常驻约 150 token)
 
-| 工具 | 参数 | 说明 |
+| 工具 | action | 说明 |
 |---|---|---|
-| `delegate` | `task`(必填), `cwd?`, `model?`, `agent?`, `session?`, `auto?=true` | 委派任务,返回 task_id |
-| `status` | `task_id` | 状态 + 输出预览 |
-| `result` | `task_id` | 完整结果(回复文本、exit code、可续接会话 id) |
-| `cancel` | `task_id` | 终止运行中的任务 |
+| `opencode_delegate` | `run` | 委派任务(`task` 必填;可选 `cwd`/`model`/`agent`/`session`/`auto`),返回 task_id |
+| | `status` | 查状态与输出预览 |
+| | `result` | 完整结果(回复文本、exit code、可续接会话 id) |
+| | `cancel` | 终止运行中的任务 |
 
 `auto=true`(默认)自动批准 OpenCode 侧权限——无人在场也能干活;传 `false`
 则可能卡在审批上,慎用。
@@ -48,8 +48,8 @@ codex mcp add opencode-delegate -- python3 ~/.config/opencode/codex-bridge/serve
 > 委派一个探索任务给 OpenCode(用 deepseek flash 模型):分析这个项目的目录
 > 结构和依赖,返回要点列表。
 
-Codex 会调用 `delegate` → 拿到 `task_id` → `status` 轮询 → `result` 取回
-OpenCode 的回复。
+Codex 会调用 `opencode_delegate`(action=run)→ 拿到 `task_id` → 轮询 `status` →
+`result` 取回 OpenCode 的回复。
 
 ## 测试
 

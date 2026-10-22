@@ -47,21 +47,21 @@ def main():
     send(proc, {"jsonrpc": "2.0", "method": "notifications/initialized"})
 
     send(proc, {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-                "params": {"name": "delegate",
-                           "arguments": {"task": "请只回复四个字:桥接就绪",
+                "params": {"name": "opencode_delegate",
+                           "arguments": {"action": "run", "task": "请只回复四个字:桥接就绪",
                                          "cwd": "/Users/panding/workspace/SIM_RUN"}}})
     tid = json.loads(tool_text(recv(proc)))["task_id"]
     print(f"2. delegate ✓ task_id={tid}")
     time.sleep(20)
 
     send(proc, {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
-                "params": {"name": "status", "arguments": {"task_id": tid}}})
+                "params": {"name": "opencode_delegate", "arguments": {"action": "status", "task_id": tid}}})
     st = json.loads(tool_text(recv(proc)))
     print(f"3. status ✓ {st.get('status')} ({st.get('duration_s')}s, {st.get('steps')} 步)")
     ok = ok and st.get("status") == "completed"
 
     send(proc, {"jsonrpc": "2.0", "id": 4, "method": "tools/call",
-                "params": {"name": "result", "arguments": {"task_id": tid}}})
+                "params": {"name": "opencode_delegate", "arguments": {"action": "result", "task_id": tid}}})
     res = json.loads(tool_text(recv(proc)))
     print(f"4. result ✓ 回复={res.get('text')!r} exit={res.get('exit_code')} 会话={res.get('opencode_session')}")
     ok = ok and res.get("text") == "桥接就绪"
@@ -73,7 +73,7 @@ def main():
     send(proc2, {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
     recv(proc2)
     send(proc2, {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-                 "params": {"name": "result", "arguments": {"task_id": tid}}})
+                 "params": {"name": "opencode_delegate", "arguments": {"action": "result", "task_id": tid}}})
     res2 = json.loads(tool_text(recv(proc2)))
     recovered = res2.get("text") == "桥接就绪"
     print(f"5. 跨进程恢复 {'✓' if recovered else '✗'} 回复={res2.get('text')!r}")

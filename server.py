@@ -11,11 +11,9 @@ opencode-codex-bridge — 让 Codex(或任何 MCP 宿主)把任务委派给 Open
   - 支持续接:delegate 时传 session=<上次返回的 opencode 会话 id>,
     即可与同一个 OpenCode 会话多轮迭代
 
-工具(4 个,刻意精简):
-  delegate {task, cwd?, model?, agent?, session?, auto?=true}
-  status   {task_id}
-  result   {task_id}
-  cancel   {task_id}
+工具(1 个,精简到底,Codex 侧常驻约 150 token):
+  opencode_delegate {action: run|status|result|cancel,
+                     task?, task_id?, cwd?, model?, agent?, session?, auto?}
 
 任务记录:~/.config/opencode/codex-bridge/tasks/<id>.json(服务重启后仍可查)
 日志:同目录 bridge.log(绝不写 stdout——stdout 是协议通道)
@@ -236,56 +234,32 @@ def cancel(args: dict) -> str:
 
 TOOLS = [
     {
-        "name": "delegate",
+        "name": "opencode_delegate",
         "description": (
-            "把一个自包含的任务委派给 OpenCode 在指定目录中 headless 执行,立即返回 task_id 不阻塞,"
-            "用 status/result 轮询取结果。可选:model(provider/model#variant,如 bailian/deepseek-v4.1-flash#low)、"
-            "agent、session(传上次 result 里的 opencode_session 可与同一会话多轮迭代)、"
-            "auto(默认 true 自动批准权限;false 则无人在场可能卡在审批)。"
+            "把任务委派给 OpenCode headless 执行(异步,不阻塞)。"
+            "action=run:委派新任务,立即返回 task_id;可选 cwd、model(如 bailian/deepseek-v4.1-flash#low)、"
+            "agent、session(传上次 result 里的 opencode_session 可续接同一会话多轮)、auto(默认 true 自动批准权限)。"
+            "action=status:查状态与输出预览;action=result:取完整结果(回复文本、exit code、可续接会话 id);"
+            "action=cancel:终止运行中的任务。"
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "task": {"type": "string", "description": "要执行的任务描述,需自包含"},
-                "cwd": {"type": "string", "description": "执行目录(绝对路径),默认当前目录"},
-                "model": {"type": "string", "description": "覆盖模型,如 bailian/kimi-k3#low"},
-                "agent": {"type": "string", "description": "覆盖 agent,如 build/plan"},
-                "session": {"type": "string", "description": "续接的 OpenCode 会话 id"},
-                "auto": {"type": "boolean", "description": "自动批准权限,默认 true"},
+                "action": {"type": "string", "enum": ["run", "status", "result", "cancel"]},
+                "task": {"type": "string", "description": "run:任务描述,需自包含"},
+                "task_id": {"type": "string", "description": "status / result / cancel 用"},
+                "cwd": {"type": "string", "description": "run:执行目录(绝对路径)"},
+                "model": {"type": "string", "description": "run:覆盖模型,如 bailian/kimi-k3#low"},
+                "agent": {"type": "string", "description": "run:覆盖 agent,如 build/plan"},
+                "session": {"type": "string", "description": "run:续接的 OpenCode 会话 id"},
+                "auto": {"type": "boolean", "description": "run:自动批准权限,默认 true"},
             },
-            "required": ["task"],
-        },
-    },
-    {
-        "name": "status",
-        "description": "查询委派任务的状态与输出预览",
-        "inputSchema": {
-            "type": "object",
-            "properties": {"task_id": {"type": "string"}},
-            "required": ["task_id"],
-        },
-    },
-    {
-        "name": "result",
-        "description": "获取已完成任务的完整结果(回复文本、exit code、可续接的 opencode 会话 id)",
-        "inputSchema": {
-            "type": "object",
-            "properties": {"task_id": {"type": "string"}},
-            "required": ["task_id"],
-        },
-    },
-    {
-        "name": "cancel",
-        "description": "终止运行中的委派任务",
-        "inputSchema": {
-            "type": "object",
-            "properties": {"task_id": {"type": "string"}},
-            "required": ["task_id"],
+            "required": ["action"],
         },
     },
 ]
 
-HANDLERS = {"delegate": delegate, "status": status, "result": result, "cancel": cancel}
+ACTIONS = {"run": delegate, "status": status, "result": result, "cancel": cancel}
 
 
 def handle(request: dict):
@@ -314,15 +288,22 @@ def handle(request: dict):
 
     if method == "tools/call":
         params = request.get("params") or {}
-        name = params.get("name")
-        if name not in HANDLERS:
+        if params.get("name") != "opencode_delegate":
             return {
                 "jsonrpc": "2.0",
                 "id": request_id,
-                "result": {"content": [{"type": "text", "text": f"未知工具 {name}"}], "isError": True},
+                "result": {"content": [{"type": "text", "text": f"未知工具 {params.get('name')}"}], "isError": True},
+            }
+        args = params.get("arguments") or {}
+        action = str(args.get("action") or "")
+        if action not in ACTIONS:
+            return {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {"content": [{"type": "text", "text": f"未知 action {action}(可用:run/status/result/cancel)"}], "isError": True},
             }
         try:
-            text = HANDLERS[name](params.get("arguments") or {})
+            text = ACTIONS[action](args)
             return {"jsonrpc": "2.0", "id": request_id, "result": {"content": [{"type": "text", "text": text}]}}
         except Exception as exc:
             return {
